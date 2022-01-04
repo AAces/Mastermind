@@ -52,29 +52,29 @@ ScriptsOnlyBuild:
     - Class: 109
       Script: {instanceID: 0}
     - Class: 114
-      Script: {instanceID: 11168}
+      Script: {instanceID: 11192}
     - Class: 114
-      Script: {instanceID: 11456}
+      Script: {instanceID: 11480}
     - Class: 114
-      Script: {instanceID: 11510}
+      Script: {instanceID: 11534}
     - Class: 114
-      Script: {instanceID: 12170}
+      Script: {instanceID: 12194}
     - Class: 114
-      Script: {instanceID: 12222}
+      Script: {instanceID: 12204}
     - Class: 114
-      Script: {instanceID: 12868}
+      Script: {instanceID: 12248}
     - Class: 114
-      Script: {instanceID: 13212}
+      Script: {instanceID: 12894}
     - Class: 114
-      Script: {instanceID: 13230}
+      Script: {instanceID: 13238}
     - Class: 114
-      Script: {instanceID: 13624}
+      Script: {instanceID: 13256}
     - Class: 114
-      Script: {instanceID: 13898}
+      Script: {instanceID: 13650}
     - Class: 114
-      Script: {instanceID: 14234}
+      Script: {instanceID: 13924}
     - Class: 114
-      Script: {instanceID: 18712}
+      Script: {instanceID: 14260}
     - Class: 115
       Script: {instanceID: 0}
     - Class: 128
@@ -298,6 +298,12 @@ ScriptsOnlyBuild:
     assemblyName: Unity.Timeline.dll
     namespaceName: UnityEngine.Timeline
     className: ControlPlayableAsset
+  - hash:
+      serializedVersion: 2
+      Hash: 1ec22a9e54c25b69068466164ed5edc1
+    assemblyName: Assembly-CSharp.dll
+    namespaceName: 
+    className: main
   - hash:
       serializedVersion: 2
       Hash: 0edeba255bdbade25edc357f1412ba38
@@ -574,12 +580,6 @@ ScriptsOnlyBuild:
     assemblyName: Unity.Timeline.dll
     namespaceName: UnityEngine.Timeline
     className: PlayableTrack
-  - hash:
-      serializedVersion: 2
-      Hash: 913fe549a7ac2d2d63676a7596bb681e
-    assemblyName: Assembly-CSharp.dll
-    namespaceName: 
-    className: main
   platform: 5
   scenePathNames:
   - Assets/Scenes/SampleScene.unity
