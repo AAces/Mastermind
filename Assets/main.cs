@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using UnityEditor.Experimental;
 using UnityEngine;
 using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
@@ -11,17 +12,17 @@ using Random = UnityEngine.Random;
 public class main : MonoBehaviour
 {
 
-    private int activeRow, possibleSols, removed, index = -1;
-    private bool pressing, percents;
+    private int activeRow, possibleSols, removed, index = -1, aiMode;
+    private bool pressing, percents, ai;
 
     private List<int[]> remainingCombos;
     private List<int[]>[] removedCombos;
 
-    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText;
-    public Text[] statTexts;
+    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText;
+    public Text[] statTexts, labels;
 
-    public Button submit, reset, prev, rand, next, quit, clear, test, flip;
-    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons;
+    public Button submit, reset, prev, rand, next, quit, clear, test, flip, testClear, aiButton;
+    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons, aiModeButtons;
     private Button[][] pegs;
 
     public SpriteRenderer check, x;
@@ -32,6 +33,7 @@ public class main : MonoBehaviour
     private Color[] indsColors; 
     private int[,] currentColors;
     private int[] reds, whites, tests, intsRemoved;
+
 
     private float[] percentsRemoved;
 
@@ -44,14 +46,22 @@ public class main : MonoBehaviour
     void init()
     {
         index = -1;
-        percents = false;
+        percents = true;
+        ai = false;
+        aiMode = 0;
+        aiButton.gameObject.SetActive(true);
+        foreach (var b in aiModeButtons)
+        {
+            b.gameObject.SetActive(false);
+        }
+        aiModeText.gameObject.SetActive(false);
+        submit.gameObject.SetActive(true);
         closeText.gameObject.SetActive(false);
         correctText.gameObject.SetActive(false);
         posText.gameObject.SetActive(false);
         imposText.gameObject.SetActive(false);
         reasonText.gameObject.SetActive(false);
         percentText.gameObject.SetActive(false);
-        testText.gameObject.SetActive(false);
         pegs = new[] { row1, row2, row3, row4, row5, row6, row7, row8, row9, row10 };
         inds = new[] { srow1, srow2, srow3, srow4, srow5, srow6, srow7, srow8, srow9, srow10 };
         reds = new int[10];
@@ -66,21 +76,118 @@ public class main : MonoBehaviour
         }
         pressing = true;
         activeRow = 0;
-        check.gameObject.SetActive(false);
-        x.gameObject.SetActive(false);
         renderBox();
         renderStats();
         setupColors();
         clearDisplay();
         setupButtons();
         setupPossibilities();
+    }
+
+    void turnOnAI()
+    {
+        init();
+        ai = true;
+        aiButton.gameObject.SetActive(false);
+        submit.gameObject.SetActive(false);
+        foreach (var b in aiModeButtons)
+        {
+            b.gameObject.SetActive(true);
+        }
+        Debug.Log("AI On");
+    }
+
+    void aiModeSelect(int m)
+    {
+        foreach (var b in aiModeButtons)
+        {
+            b.gameObject.SetActive(false);
+        }
+
+        aiMode = m;
+        switch (m) //0=random
+        {
+            case 0:
+                aiModeText.text = "AI: Random";
+                aiModeText.gameObject.SetActive(true);
+                aiGuess();
+                break;
+        }
+    }
+
+    void aiGuess()
+    {
+        if (activeRow > 8)
+        {
+            return;
+        }
+
+        if (remainingCombos.Count == 0)
+        {
+            Debug.Log("No Possible solutions!");
+            foreach (var b in boxes)
+            {
+                b.gameObject.SetActive(false);
+            }
+
+            for (var i = activeRow; i < 10; i++)
+            {
+                foreach (var v in inds[i])
+                {
+                    v.color = indsColors[4];
+                }
+            }
+            
+            return;
+        }
+
+        var guess = new[] {0, 0, 0, 0};
+        switch (aiMode)
+        {
+            case 0:
+                guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                break;
+        }
+
+        for (var i = 0; i < 4; i++)
+        {
+            var c = pegs[activeRow][i].colors;
+            c.normalColor = colors[guess[i]];
+            c.highlightedColor = colors[guess[i]];
+            c.selectedColor = colors[guess[i]];
+            c.pressedColor = colors[guess[i]];
+            pegs[activeRow][i].colors = c;
+            currentColors[activeRow, i] = guess[i];
+        }
+
+        if (remainingCombos.Count == 1)
+        {
+            foreach (var b in boxes)
+            {
+                b.gameObject.SetActive(false);
+            }
+
+            foreach (var b in inds[activeRow])
+            {
+                b.color = indsColors[3];
+            }
+        }
+        else
+        {
+            sayIfPossible();
+            startHinting();
+        }
 
     }
 
     void setupColors() 
     {
         colors = new[] { Color.white, new Color(0f,0.47f,0.41f,1.0f), new Color(.858f,.745f,0f,1f), new Color(1f,0f,.45f,1f), new Color(1f, .384f, 0f, 1f), new Color(.38f, 0f, .529f, 1f), Color.gray };
-        indsColors = new[] { Color.black, Color.white, new Color(180,0,0,255)};
+        indsColors = new[] { Color.black, Color.white, Color.red, new Color(0f,.9f,0f,1f), new Color(1f, .36f, 0f, 1f) };
+        foreach (var v in labels)
+        {
+            v.color = Color.white;
+        }
     }
 
     void setupButtons()
@@ -113,6 +220,9 @@ public class main : MonoBehaviour
         test.onClick.RemoveAllListeners();
         test.onClick.AddListener(testSubmitPress);
 
+        testClear.onClick.RemoveAllListeners();
+        testClear.onClick.AddListener(testClearPress);
+
         foreach (var b in redButtons)
         {
             b.gameObject.SetActive(false);
@@ -136,14 +246,9 @@ public class main : MonoBehaviour
             testButtons[i].GetComponentInParent<Image>().color = Color.white;
             testButtons[i].onClick.RemoveAllListeners();
             testButtons[i].onClick.AddListener(delegate { testButtonPress(p);});
-            var c = testButtons[i].colors;
-            c.normalColor = colors[6];
-            c.highlightedColor = colors[6];
-            c.selectedColor = colors[6];
-            c.pressedColor = colors[6];
-            testButtons[i].colors = c;
-            tests[i] = 6;
         }
+
+        testClearPress();
 
         prev.onClick.RemoveAllListeners();
         prev.onClick.AddListener(dispPrev);
@@ -160,6 +265,33 @@ public class main : MonoBehaviour
 
         flip.onClick.RemoveAllListeners();
         flip.onClick.AddListener(switchStatsButton);
+
+        aiButton.onClick.RemoveAllListeners();
+        aiButton.onClick.AddListener(turnOnAI);
+
+        for (var i = 0; i < aiModeButtons.Length; i++)
+        {
+            var m = i;
+            aiModeButtons[i].onClick.RemoveAllListeners();
+            aiModeButtons[i].onClick.AddListener(delegate { aiModeSelect(m); });
+        }
+    }
+
+    void testClearPress()
+    {
+        x.gameObject.SetActive(false);
+        check.gameObject.SetActive(false);
+        testText.gameObject.SetActive(false);
+        for (var i = 0; i < 4; i++)
+        {
+            var c = testButtons[i].colors;
+            c.normalColor = colors[6];
+            c.highlightedColor = colors[6];
+            c.selectedColor = colors[6];
+            c.pressedColor = colors[6];
+            testButtons[i].colors = c;
+            tests[i] = 6;
+        }
     }
 
     void clearDisplay()
@@ -252,37 +384,201 @@ public class main : MonoBehaviour
 
     void testSubmitPress()
     {
+        
         x.gameObject.SetActive(false);
         check.gameObject.SetActive(false);
         testText.gameObject.SetActive(false);
+        testText.text = "error";
+
+        var submitted = new int[]{tests[0], tests[1], tests[2], tests[3]};
+
+        //Debug.Log("test button pressed with " +submitted[0] + submitted[1] + submitted[2] + submitted[3]);
+        var grey = 0;
         for (var i = 0; i < 4; i++)
         {
-            if (tests[i] == 6)
+            if (submitted[i] == 6)
             {
-                return;
+                grey++;
             }
         }
 
-        if (comboInList(tests, remainingCombos))
+        //Debug.Log("there are " + grey + " greys.");
+
+        if (grey == 4) return;
+
+        var possibilities=0;
+        var errors = new bool[10];
+        for (var i = 0; i < 10; i++)
+        {
+            errors[i] = false;
+        }
+
+        var firstGrey = -1;
+        var secondGrey = -1;
+        var thirdGrey = -1;
+        switch (grey)
+        {
+            case 3:
+                for (var i = 0; i < 4; i++)
+                {
+                    if (submitted[i] == 6)
+                    {
+                        if (firstGrey == -1)
+                        {
+                            firstGrey = i;
+                        }
+                        else if(secondGrey == -1)
+                        {
+                            secondGrey = i;
+                        }
+                        else
+                        {
+                            thirdGrey = i;
+                            break;
+                        }
+                    }
+                }
+                for (var i = 0; i < 6; i++)
+                {
+                    for (var j = 0; j < 6; j++)
+                    {
+                        for (var k = 0; k < 6; k++)
+                        {
+                            submitted[firstGrey] = i;
+                            submitted[secondGrey] = j;
+                            submitted[thirdGrey] = k;
+                            if (comboInList(submitted, remainingCombos))
+                            {
+                                possibilities++;
+                            }
+                            else
+                            {
+                                for (var m = 0; m < 10; m++)
+                                {
+                                    if (comboInList(submitted, removedCombos[m]))
+                                    {
+                                        errors[m] = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case 2:
+                for (var i = 0; i < 4; i++)
+                {
+                    if (submitted[i] == 6)
+                    {
+                        if (firstGrey == -1)
+                        {
+                            firstGrey = i;
+                        }
+                        else
+                        {
+                            secondGrey = i;
+                            break;
+                        }
+                    }
+                }
+
+                for (var i = 0; i < 6; i++)
+                {
+                    for (var j = 0; j < 6; j++)
+                    {
+                        submitted[firstGrey] = i;
+                        submitted[secondGrey] = j;
+                        if (comboInList(submitted, remainingCombos))
+                        {
+                            possibilities++;
+                        }
+                        else
+                        {
+                            for (var m = 0; m < 10; m++)
+                            {
+                                if (comboInList(submitted, removedCombos[m]))
+                                {
+                                    errors[m] = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            case 1:
+                for (var i = 0; i < 4; i++)
+                {
+                    if (submitted[i] == 6)
+                    {
+                        firstGrey = i;
+                        break;
+                    }
+                }
+                for (var i = 0; i < 6; i++)
+                {
+                    submitted[firstGrey] = i;
+                    if (comboInList(submitted, remainingCombos))
+                    {
+                        possibilities++;
+                    }
+                    else
+                    {
+                        for (var m = 0; m < 10; m++)
+                        {
+                            if (comboInList(submitted, removedCombos[m]))
+                            {
+                                errors[m] = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                break;
+            case 0:
+                if (comboInList(submitted, remainingCombos))
+                {
+                    check.gameObject.SetActive(true);
+                }
+                else
+                {
+                    x.gameObject.SetActive(true);
+                    var r = 0;
+                    for (var i = 0; i < 10; i++)
+                    {
+                        if (comboInList(submitted, removedCombos[i]))
+                        {
+                            r = i + 1;
+                            break;
+                        }
+                    }
+                    testText.text = "(" + r + ")";
+                    testText.gameObject.SetActive(true);
+                }
+                return;
+        }
+        if (possibilities >= 1)
         {
             check.gameObject.SetActive(true);
+            testText.text = "(" + possibilities + ")";
+            testText.gameObject.SetActive(true);
         }
         else
         {
             x.gameObject.SetActive(true);
-            var r = 0;
+            var r = "";
             for (var i = 0; i < 10; i++)
             {
-                if (comboInList(tests, removedCombos[i]))
+                if (errors[i])
                 {
-                    r = i + 1;
-                    break;
+                    r += (i + 1) + ",";
                 }
             }
+            r = r.Truncate(r.Length - 1);
             testText.text = "(" + r + ")";
             testText.gameObject.SetActive(true);
         }
-
     }
 
     void submitPress()
@@ -324,6 +620,7 @@ public class main : MonoBehaviour
         if (comboInList(sub, remainingCombos))
         {
             posText.gameObject.SetActive(true);
+            labels[activeRow].color = indsColors[3];
         }
         else
         {
@@ -339,6 +636,7 @@ public class main : MonoBehaviour
             }
             reasonText.text = "("+r+")";
             reasonText.gameObject.SetActive(true);
+            labels[activeRow].color = indsColors[2];
         }
     }
 
@@ -372,7 +670,7 @@ public class main : MonoBehaviour
             b.gameObject.SetActive(false);
         }
         correctText.gameObject.SetActive(false);
-        if (reds[activeRow] == 4)
+        if (reds[activeRow] == 4 && !ai)
         {
             updatePossibilities();
             boxes[activeRow].gameObject.SetActive(false);
@@ -419,6 +717,10 @@ public class main : MonoBehaviour
             return;
         }
         pressing = true;
+        if (ai)
+        {
+            aiGuess();
+        }
     }
 
     void renderBox()
@@ -599,10 +901,6 @@ public class main : MonoBehaviour
         Debug.Log("Removed " + removed + " possible answers.");
         possibleSols = remainingCombos.Count;
         Debug.Log("Remaining Possible Solutions: " + possibleSols);
-        if (possibleSols == 1)
-        {
-            dispCombo(remainingCombos[0]);
-        }
         renderCount();
     }
 }
