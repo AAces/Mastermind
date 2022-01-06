@@ -2,8 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using UnityEditor.Experimental;
+using System.Threading;
 using UnityEngine;
 using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
@@ -12,17 +11,17 @@ using Random = UnityEngine.Random;
 public class main : MonoBehaviour
 {
 
-    private int activeRow, possibleSols, removed, index = -1, aiMode;
-    private bool pressing, percents, ai;
+    private int activeRow, possibleSols, removed, index = -1, aiMode, count;
+    private bool pressing, percents, ai, aiAuto, STOP;
 
     private List<int[]> remainingCombos;
     private List<int[]>[] removedCombos;
 
-    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText;
-    public Text[] statTexts, labels;
+    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText, aiAutoText, speed;
+    public Text[] statTexts, labels, textToHideDuringAuto, autoInfoText;
 
-    public Button submit, reset, prev, rand, next, quit, clear, test, flip, testClear, aiButton;
-    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons, aiModeButtons;
+    public Button submit, reset, prev, rand, next, quit, clear, test, flip, testClear, aiButton, aiAutoButton, stopAuto;
+    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons, aiModeButtons, speedButtons;
     private Button[][] pegs;
 
     public SpriteRenderer check, x;
@@ -32,12 +31,13 @@ public class main : MonoBehaviour
     private Color[] colors;
     private Color[] indsColors; 
     private int[,] currentColors;
-    private int[] reds, whites, tests, intsRemoved;
+    private int[] reds, whites, tests, intsRemoved, aiSolution, howManyRows;
 
+    private double sd;
 
+    private float average, gapTime;
     private float[] percentsRemoved;
 
-    // Start is called before the first frame update
     void Start()
     {
         init();
@@ -48,12 +48,22 @@ public class main : MonoBehaviour
         index = -1;
         percents = true;
         ai = false;
+        aiAuto = false;
+        STOP = false;
+        autoShow();
+        aiAutoText.gameObject.SetActive(false);
         aiMode = 0;
         aiButton.gameObject.SetActive(true);
+        aiAutoButton.gameObject.SetActive(false);
         foreach (var b in aiModeButtons)
         {
             b.gameObject.SetActive(false);
         }
+        sd = 0f;
+        average = 0f;
+        count = 0;
+        gapTime = 0.1f;
+        speed.text = "0.1";
         aiModeText.gameObject.SetActive(false);
         submit.gameObject.SetActive(true);
         closeText.gameObject.SetActive(false);
@@ -62,6 +72,7 @@ public class main : MonoBehaviour
         imposText.gameObject.SetActive(false);
         reasonText.gameObject.SetActive(false);
         percentText.gameObject.SetActive(false);
+        stopAuto.gameObject.SetActive(false);
         pegs = new[] { row1, row2, row3, row4, row5, row6, row7, row8, row9, row10 };
         inds = new[] { srow1, srow2, srow3, srow4, srow5, srow6, srow7, srow8, srow9, srow10 };
         reds = new int[10];
@@ -84,17 +95,61 @@ public class main : MonoBehaviour
         setupPossibilities();
     }
 
+    void setGaptime(int b)
+    {
+        switch (b)
+        {
+            case 0:
+                gapTime = 0.01f;
+                speed.text = "0.01";
+                break;
+            case 1:
+                gapTime = 0.1f;
+                speed.text = "0.1";
+                break;
+            case 2:
+                gapTime = 0.5f;
+                speed.text = "0.5";
+                break;
+            case 3:
+                gapTime = 1f;
+                speed.text = "1.0";
+                break;
+            case 4:
+                gapTime = 0.001f;
+                speed.text = "0.001";
+                break;
+        }
+    }
+
     void turnOnAI()
     {
         init();
         ai = true;
         aiButton.gameObject.SetActive(false);
         submit.gameObject.SetActive(false);
+        aiAutoButton.gameObject.SetActive(true);
         foreach (var b in aiModeButtons)
         {
             b.gameObject.SetActive(true);
         }
         Debug.Log("AI On");
+    }
+
+    void turnOnAuto()
+    {
+        autoHide();
+        pressing = false;
+        aiAuto = true;
+        howManyRows = new[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        newAutoSolution();
+        renderAutoStats();
+    }
+
+    void newAutoSolution()
+    {
+        aiSolution = new[] { Random.Range(0, 6), Random.Range(0, 6), Random.Range(0, 6), Random.Range(0, 6) };
+        dispCombo(aiSolution);
     }
 
     void aiModeSelect(int m)
@@ -103,21 +158,24 @@ public class main : MonoBehaviour
         {
             b.gameObject.SetActive(false);
         }
-
+        aiAutoButton.gameObject.SetActive(false);
         aiMode = m;
         switch (m) //0=random
         {
             case 0:
                 aiModeText.text = "AI: Random";
-                aiModeText.gameObject.SetActive(true);
-                aiGuess();
+                break;
+            case 1:
+                aiModeText.text = "AI: Smart 1st";
                 break;
         }
+        aiModeText.gameObject.SetActive(true);
+        aiGuess();
     }
 
     void aiGuess()
     {
-        if (activeRow > 8)
+        if (activeRow > 8 || STOP || count>99999)
         {
             return;
         }
@@ -137,7 +195,6 @@ public class main : MonoBehaviour
                     v.color = indsColors[4];
                 }
             }
-            
             return;
         }
 
@@ -146,6 +203,49 @@ public class main : MonoBehaviour
         {
             case 0:
                 guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                break;
+            case 1:
+                if (activeRow == 0)
+                {
+                    var f = Random.Range(0, 6);
+                    int s;
+                    int t;
+                    do
+                    {
+                        s = Random.Range(0, 6);
+                    } while (s == f);
+
+                    do
+                    {
+                        t = Random.Range(0, 6);
+                    } while (t == s || t == f);
+
+                    switch (Random.Range(0, 6))
+                    {
+                        case 0:
+                            guess = new[] { f, f, s, t };
+                            break;
+                        case 1:
+                            guess = new[] { f, s, f, t };
+                            break;
+                        case 2:
+                            guess = new[] { f, s, t, f };
+                            break;
+                        case 3:
+                            guess = new[] { s, f, f, t };
+                            break;
+                        case 4:
+                            guess = new[] { s, f, t, f };
+                            break;
+                        case 5:
+                            guess = new[] { s, t, f, f };
+                            break;
+                    }
+                }
+                else
+                {
+                    guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                }
                 break;
         }
 
@@ -160,24 +260,302 @@ public class main : MonoBehaviour
             currentColors[activeRow, i] = guess[i];
         }
 
-        if (remainingCombos.Count == 1)
+        if (!aiAuto)
         {
-            foreach (var b in boxes)
+            if (remainingCombos.Count == 1)
             {
-                b.gameObject.SetActive(false);
-            }
+                foreach (var b in boxes)
+                {
+                    b.gameObject.SetActive(false);
+                }
 
-            foreach (var b in inds[activeRow])
+                foreach (var b in inds[activeRow])
+                {
+                    b.color = indsColors[3];
+                }
+            }
+            else
             {
-                b.color = indsColors[3];
+                sayIfPossible();
+                startHinting();
             }
         }
         else
         {
-            sayIfPossible();
-            startHinting();
+            StartCoroutine(autoCheck(guess));
         }
 
+    }
+
+    IEnumerator autoCheck(int[] guess)
+    {
+        //to stop weirdness
+        var s = new[] { aiSolution[0], aiSolution[1], aiSolution[2], aiSolution[3] };
+        var g = new[] { guess[0], guess[1], guess[2], guess[3] };
+
+        //REDS
+        var red = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            if (g[i] == s[i])
+            {
+                red++;
+                s[i] = -1;
+                g[i] = -2;
+            }
+        }
+        reds[activeRow] = red;
+        if (red == 4)
+        {
+            autoNextGame();
+            yield break;
+        }
+        if (reds[activeRow] > 0)
+        {
+            for (var i = 0; i < reds[activeRow]; i++)
+            {
+                inds[activeRow][i].color = indsColors[2];
+            }
+        }
+        //WHITES
+        var white = 0;
+        var gu = new[] { 0, 0, 0, 0, 0, 0 };
+        var so = new[] { 0, 0, 0, 0, 0, 0 };
+
+        foreach (var v in g)
+        {
+            if (v != -2)
+            {
+                gu[v]++;
+            }
+        }
+        foreach (var v in s)
+        {
+            if (v != -1)
+            {
+                so[v]++;
+            }
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            if (gu[i] != 0 && so[i] != 0)
+            {
+                if (so[i] <= gu[i])
+                {
+                    white += so[i];
+                }
+                else
+                {
+                    white += gu[i];
+                }
+            }
+        }
+
+        whites[activeRow] = white;
+        if (whites[activeRow] > 0)
+        {
+            for (var i = reds[activeRow]; i < reds[activeRow] + whites[activeRow]; i++)
+            {
+                inds[activeRow][i].color = indsColors[1];
+            }
+        }
+
+        //UPDATE
+        updatePossibilities();
+        if (activeRow < 9)
+        {
+            activeRow++;
+            renderBox();
+        }
+        else
+        {
+            Debug.Log("out of rows");
+            yield break;
+        }
+
+        yield return new WaitForSeconds(gapTime);
+        aiGuess();
+    }
+
+    void autoHide()
+    {
+        aiAutoButton.gameObject.SetActive(false);
+        aiAutoText.gameObject.SetActive(true);
+        stopAuto.gameObject.SetActive(true);
+
+        submit.gameObject.SetActive(false);
+        rand.gameObject.SetActive(false);
+        next.gameObject.SetActive(false);
+        prev.gameObject.SetActive(false);
+        reset.gameObject.SetActive(false);
+
+        clear.gameObject.SetActive(false);
+        test.gameObject.SetActive(false);
+        testClear.gameObject.SetActive(false);
+
+        remainingText.gameObject.SetActive(false);
+        removedText.gameObject.SetActive(false);
+        flip.gameObject.SetActive(false);
+        percentText.gameObject.SetActive(false);
+
+        speed.gameObject.SetActive(true);
+        foreach (var c in speedButtons)
+        {
+            c.gameObject.SetActive(true);
+        }
+
+        foreach (var c in textToHideDuringAuto)
+        {
+            c.gameObject.SetActive(false);
+        }
+        foreach (var c in testButtons)
+        {
+            c.gameObject.SetActive(false);
+        }
+        foreach (var c in statTexts)
+        {
+            c.gameObject.SetActive(true);
+        }
+        foreach (var c in autoInfoText)
+        {
+            c.gameObject.SetActive(true);
+        }
+    }
+
+    void autoShow()
+    {
+        aiAutoButton.gameObject.SetActive(true);
+        aiAutoText.gameObject.SetActive(false);
+        stopAuto.gameObject.SetActive(false);
+
+        submit.gameObject.SetActive(true);
+        rand.gameObject.SetActive(true);
+        next.gameObject.SetActive(true);
+        prev.gameObject.SetActive(true);
+        reset.gameObject.SetActive(true);
+
+        clear.gameObject.SetActive(true);
+        test.gameObject.SetActive(true);
+        testClear.gameObject.SetActive(true);
+
+        remainingText.gameObject.SetActive(true);
+        removedText.gameObject.SetActive(true);
+        flip.gameObject.SetActive(true);
+        percentText.gameObject.SetActive(true);
+
+        speed.gameObject.SetActive(false);
+        foreach (var c in speedButtons)
+        {
+            c.gameObject.SetActive(false);
+        }
+        foreach (var c in statTexts)
+        {
+            c.gameObject.SetActive(false);
+        }
+        foreach (var c in textToHideDuringAuto)
+        {
+            c.gameObject.SetActive(true);
+        }
+        foreach (var c in testButtons)
+        {
+            c.gameObject.SetActive(true);
+        }
+        foreach (var c in disp)
+        {
+            c.gameObject.SetActive(true);
+        }
+        foreach (var c in autoInfoText)
+        {
+            c.gameObject.SetActive(false);
+        }
+    }
+
+    void autoNextGame()
+    {
+        howManyRows[activeRow]++;
+        count++;
+        average = 0;
+        sd = 0;
+        for (var i = 0; i < 10; i++)
+        {
+            average += (i + 1) * howManyRows[i];
+        }
+        average /= count;
+        for (var i = 0; i < 10; i++)
+        {
+            sd += howManyRows[i] * Math.Pow(i + 1 - average, 2);
+        }
+        sd /= (count - 1);
+        sd = Math.Sqrt(sd);
+        renderAutoStats();
+
+        reds = new int[10];
+        whites = new int[10];
+        tests = new int[4];
+        intsRemoved = new int[10];
+        percentsRemoved = new float[10];
+        for (var i = 0; i < 10; i++)
+        {
+            reds[i] = 0;
+            whites[i] = 0;
+        }
+        activeRow = 0;
+        renderBox();
+        setupColors();
+        remainingCombos = new List<int[]>();
+        removedCombos = new[] { new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>(), new List<int[]>() };
+        for (var i = 0; i < 6; i++)
+        {
+            for (var j = 0; j < 6; j++)
+            {
+                for (var k = 0; k < 6; k++)
+                {
+                    for (var l = 0; l < 6; l++)
+                    {
+                        remainingCombos.Add(new[] { i, j, k, l });
+                    }
+                }
+            }
+        }
+        possibleSols = remainingCombos.Count;
+        removed = 0;
+        for (var i = 0; i < 10; i++)
+        {
+            for (var j = 0; j < 4; j++)
+            {
+                var c = pegs[i][j].colors;
+                c.normalColor = colors[6];
+                c.highlightedColor = colors[6];
+                c.selectedColor = colors[6];
+                c.pressedColor = colors[6];
+                pegs[i][j].colors = c;
+                currentColors[i, j] = 6;
+                inds[i][j].color = indsColors[0];
+            }
+        }
+        newAutoSolution();
+
+        aiGuess();
+    }
+
+    void renderAutoStats()
+    {
+        autoInfoText[0].text = count.ToString();
+        autoInfoText[1].text = average.ToString().Truncate(4);
+        autoInfoText[2].text = sd.ToString().Truncate(4);
+        for (var i = 0; i < 10; i++)
+        {
+            statTexts[i].text = howManyRows[i].ToString();
+        }
+    }
+
+    void stopAutoPress()
+    {
+        STOP = true;
+        reset.gameObject.SetActive(true);
+        renderAutoStats();
+        stopAuto.gameObject.SetActive(false);
     }
 
     void setupColors() 
@@ -269,11 +647,24 @@ public class main : MonoBehaviour
         aiButton.onClick.RemoveAllListeners();
         aiButton.onClick.AddListener(turnOnAI);
 
+        aiAutoButton.onClick.RemoveAllListeners();
+        aiAutoButton.onClick.AddListener(turnOnAuto);
+
+        stopAuto.onClick.RemoveAllListeners();
+        stopAuto.onClick.AddListener(stopAutoPress);
+
         for (var i = 0; i < aiModeButtons.Length; i++)
         {
             var m = i;
             aiModeButtons[i].onClick.RemoveAllListeners();
             aiModeButtons[i].onClick.AddListener(delegate { aiModeSelect(m); });
+        }
+
+        for (var i = 0; i < 5; i++)
+        {
+            var m = i;
+            speedButtons[i].onClick.RemoveAllListeners();
+            speedButtons[i].onClick.AddListener(delegate { setGaptime(m); });
         }
     }
 
@@ -670,11 +1061,17 @@ public class main : MonoBehaviour
             b.gameObject.SetActive(false);
         }
         correctText.gameObject.SetActive(false);
-        if (reds[activeRow] == 4 && !ai)
+        if (reds[activeRow] == 4)
         {
-            updatePossibilities();
             boxes[activeRow].gameObject.SetActive(false);
             Debug.Log("That's correct!");
+            if (ai)
+            {
+                foreach (var b in inds[activeRow])
+                {
+                    b.color = indsColors[3];
+                }
+            }
             return;
         }
         for (var i = 0; i < 5 - reds[activeRow]; i++)
@@ -833,13 +1230,11 @@ public class main : MonoBehaviour
         var w = whites[a];
         var toRemove = new List<int[]>();
         removed = 0;
-        var co = 0;
         foreach (var c in remainingCombos)
         {
-            co++;
             var same = 0;
             var sim = 0;
-            var col = new [] {c[0], c[1] , c[2] , c[3] };
+            var col = new [] { c[0], c[1] , c[2] , c[3] };
             var row = new[] { currentColors[a, 0], currentColors[a, 1], currentColors[a, 2], currentColors[a, 3] };
             for (var i = 0; i < 4; i++)
             {
@@ -874,9 +1269,9 @@ public class main : MonoBehaviour
             {
                 if (f[i] != 0 && s[i] != 0)
                 {
-                    if (s[i]<=f[i])
+                    if (s[i] <= f[i])
                     {
-                        sim+=s[i];
+                        sim += s[i];
                     }
                     else
                     {
@@ -897,9 +1292,9 @@ public class main : MonoBehaviour
             remainingCombos.Remove(c);
             removed++;
         }
-
-        Debug.Log("Removed " + removed + " possible answers.");
         possibleSols = remainingCombos.Count;
+        if (aiAuto) return;
+        Debug.Log("Removed " + removed + " possible answers.");
         Debug.Log("Remaining Possible Solutions: " + possibleSols);
         renderCount();
     }
