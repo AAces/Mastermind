@@ -307,6 +307,11 @@ public class main : MonoBehaviour
         reds[activeRow] = red;
         if (red == 4)
         {
+            for (var i = 0; i < reds[activeRow]; i++)
+            {
+                inds[activeRow][i].color = indsColors[3];
+            }
+            yield return new WaitForSeconds(2 * gapTime);
             autoNextGame();
             yield break;
         }
@@ -542,8 +547,8 @@ public class main : MonoBehaviour
     void renderAutoStats()
     {
         autoInfoText[0].text = count.ToString();
-        autoInfoText[1].text = average.ToString().Truncate(4);
-        autoInfoText[2].text = sd.ToString().Truncate(4);
+        autoInfoText[1].text = average.ToString().Truncate(5);
+        autoInfoText[2].text = sd.ToString().Truncate(5);
         for (var i = 0; i < 10; i++)
         {
             statTexts[i].text = howManyRows[i].ToString();
