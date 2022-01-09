@@ -14,7 +14,7 @@ public class main : MonoBehaviour
     private int activeRow, possibleSols, removed, index = -1, aiMode, count;
     private bool pressing, percents, ai, aiAuto, STOP;
 
-    private List<int[]> remainingCombos;
+    private List<int[]> remainingCombos, allCombos;
     private List<int[]>[] removedCombos;
 
     public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText, aiAutoText, speed;
@@ -59,7 +59,7 @@ public class main : MonoBehaviour
         {
             b.gameObject.SetActive(false);
         }
-        sd = 0f;
+        sd = 0;
         average = 0f;
         count = 0;
         gapTime = 0.1f;
@@ -73,6 +73,7 @@ public class main : MonoBehaviour
         reasonText.gameObject.SetActive(false);
         percentText.gameObject.SetActive(false);
         stopAuto.gameObject.SetActive(false);
+        alreadyGuessed = new List<int[]>();
         pegs = new[] { row1, row2, row3, row4, row5, row6, row7, row8, row9, row10 };
         inds = new[] { srow1, srow2, srow3, srow4, srow5, srow6, srow7, srow8, srow9, srow10 };
         reds = new int[10];
@@ -129,6 +130,7 @@ public class main : MonoBehaviour
         aiButton.gameObject.SetActive(false);
         submit.gameObject.SetActive(false);
         aiAutoButton.gameObject.SetActive(true);
+        alreadyGuessed.Clear();
         foreach (var b in aiModeButtons)
         {
             b.gameObject.SetActive(true);
@@ -168,11 +170,32 @@ public class main : MonoBehaviour
             case 1:
                 aiModeText.text = "AI: Smart 1st";
                 break;
+            case 2:
+                aiModeText.text = "AI: Elimination";
+                break;
+            case 3:
+                aiModeText.text = "AI: Min/Max";
+                allCombos = new List<int[]>();
+                for (var i = 0; i < 6; i++)
+                {
+                    for (var j = 0; j < 6; j++)
+                    {
+                        for (var k = 0; k < 6; k++)
+                        {
+                            for (var l = 0; l < 6; l++)
+                            {
+                                allCombos.Add(new[] { i, j, k, l });
+                            }
+                        }
+                    }
+                }
+                break;
         }
         aiModeText.gameObject.SetActive(true);
         aiGuess();
     }
 
+    private List<int[]> alreadyGuessed;
     void aiGuess()
     {
         if (activeRow > 8 || STOP || count>99999)
@@ -201,10 +224,11 @@ public class main : MonoBehaviour
         var guess = new[] {0, 0, 0, 0};
         switch (aiMode)
         {
-            case 0:
+            case 0: //random
                 guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                alreadyGuessed.Add(guess);
                 break;
-            case 1:
+            case 1: //smart first
                 if (activeRow == 0)
                 {
                     var f = Random.Range(0, 6);
@@ -241,10 +265,318 @@ public class main : MonoBehaviour
                             guess = new[] { s, t, f, f };
                             break;
                     }
+                    alreadyGuessed.Add(guess);
                 }
                 else
                 {
-                    guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                    goto case 0;
+                }
+                break;
+            case 2: //elimination
+                if (activeRow == 0)
+                {
+                    goto case 1;
+                } else if (possibleSols > 100)
+                {
+                    var n = new[] { 0, 0, 0, 0, 0, 0 };
+                    foreach (var v in remainingCombos)
+                    {
+                        for (var i = 0; i < 6; i++)
+                        {
+                            if (v.Contains(i))
+                            {
+                                n[i]++;
+                            }
+                        }
+                    }
+
+                    TryAgain:
+                    var max = -1;
+                    for (var i = 0;i<6;i++)
+                    {
+                        if (n[i] > max)
+                        {
+                            max = n[i];
+                        }
+                    }
+
+                    var o = n.Select((s, i) => new {i, s})
+                        .Where(t => t.s == max)
+                        .Select(t => t.i)
+                        .ToList();
+                    string st = "";
+                    var c = new[] { 0, 0, 0, 0, 0, 0 };
+                    switch (o.Count)
+                    {
+                        case 1:
+                            var found1 = false;
+                            var t1 = 3;
+                            Try1:
+                            guess = new[] { o[0], o[0], o[0], o[0] };
+                            if (!comboInList(guess, remainingCombos))
+                            {
+                                foreach (var v in remainingCombos)
+                                {
+                                    c = new[] {0, 0, 0, 0, 0, 0};
+                                    foreach (var i in v)
+                                    {
+                                        c[i]++;
+                                    }
+
+                                    if (c[o[0]] == t1)
+                                    {
+                                        guess = v;
+                                        found1 = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!found1)
+                                {
+                                    t1--;
+                                    goto Try1;
+                                }
+                            }
+                            if (aiAuto) break;
+                            st = guess[0].ToString() + guess[1].ToString() + guess[2].ToString() + guess[3].ToString();
+                            Debug.Log("The most used is " + o[0] + ", which occurs " + max + " times. Guessing " + st + ".");
+                            break;
+                        case 2:
+                            var found2 = false;
+                            var t21 = 2;
+                            var t22 = 2;
+                        Try2:
+                            guess = new[] { o[0], o[0], o[1], o[1] };
+                            if (!comboInList(guess, remainingCombos))
+                            {
+                                foreach (var v in remainingCombos)
+                                {
+                                    c = new[] { 0, 0, 0, 0, 0, 0 };
+                                    foreach (var i in v)
+                                    {
+                                        c[i]++;
+                                    }
+
+                                    if (c[o[0]] == t21 && c[o[1]] == t22)
+                                    {
+                                        guess = v;
+                                        found2 = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!found2)
+                                {
+                                    if (t21 >= t22)
+                                    {
+                                        t21--;
+                                    }
+                                    else
+                                    {
+                                        t22--;
+                                    }
+                                    goto Try2;
+                                }
+                            }
+
+                            if (aiAuto) break;
+                            st = guess[0].ToString() + guess[1].ToString() + guess[2].ToString() + guess[3].ToString();
+                            Debug.Log("The most used are " + o[0] + " and " + o[1] + ", which occur " + max + " times. Guessing " + st + ".");
+                            break;
+                        case 3:
+                            var found3 = false;
+                            var t31 = 2;
+                            var t32 = 1;
+                            var t33 = 1;
+                            Try3:
+                            guess = new[] { o[0], o[0], o[1], o[2] };
+                            if (!comboInList(guess, remainingCombos))
+                            {
+                                foreach (var v in remainingCombos)
+                                {
+                                    c = new[] { 0, 0, 0, 0, 0, 0 };
+                                    foreach (var i in v)
+                                    {
+                                        c[i]++;
+                                    }
+
+                                    if ((c[o[0]] == t31 && c[o[1]] == t32 && c[o[2]] == t33) || (c[o[1]] == t31 && c[o[2]] == t32 && c[o[0]] == t33) || (c[o[2]] == t31 && c[o[0]] == t32 && c[o[1]] == t33))
+                                    {
+                                        guess = v;
+                                        found3 = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!found3)
+                                {
+                                    switch (t31)
+                                    {
+                                        case 2:
+                                        case 1:
+                                            t31--;
+                                            break;
+                                        default:
+                                            t32--;
+                                            break;
+                                    }
+
+                                    goto Try3;
+                                }
+                            }
+                            if (aiAuto) break;
+                            st = guess[0].ToString() + guess[1].ToString() + guess[2].ToString() + guess[3].ToString();
+                            Debug.Log("The most used are " + o[0] + ", " + o[1] + ", and " +o[2]+ ", which occur " + max + " times. Guessing " + st + ".");
+                            break;
+                        case 4:
+                            var found4 = false;
+                            var t41 = 1;
+                            var t42 = 1;
+                            var t43 = 1;
+                            var t44 = 1;
+                        Try4:
+                            guess = new[] { o[0], o[1], o[2], o[3] };
+                            if (!comboInList(guess, remainingCombos))
+                            {
+                                foreach (var v in remainingCombos)
+                                {
+                                    c = new[] { 0, 0, 0, 0, 0, 0 };
+                                    foreach (var i in v)
+                                    {
+                                        c[i]++;
+                                    }
+
+                                    if ((c[o[0]] == t41 && c[o[1]] == t42 && c[o[2]] == t43 && c[o[3]]==t44)|| (c[o[1]] == t41 && c[o[2]] == t42 && c[o[3]] == t43 && c[o[0]] == t44)|| (c[o[2]] == t41 && c[o[3]] == t42 && c[o[0]] == t43 && c[o[1]] == t44)|| (c[o[3]] == t41 && c[o[0]] == t42 && c[o[1]] == t43 && c[o[2]] == t44))
+                                    {
+                                        guess = v;
+                                        found4 = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!found4)
+                                {
+                                    if (t41 == 1)
+                                    {
+                                        t41--;
+                                    } else if (t42 == 1)
+                                    {
+                                        t42--;
+                                    }
+                                    else 
+                                    {
+                                        t43--;
+                                    }
+                                    goto Try4;
+                                }
+                            }
+                            if (aiAuto) break;
+                            st = guess[0].ToString() + guess[1].ToString() + guess[2].ToString() + guess[3].ToString();
+                            Debug.Log("The most used are " + o[0] + ", " + o[1] + ", " + o[2] + ", and " + o[3] + ", which occur " + max + " times. Guessing "+st+".");
+                            break;
+                        default:
+                            guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                            break;
+                    }
+
+                    if (comboInList(guess, alreadyGuessed))
+                    {
+                        n[o[0]] = 0;
+                        goto TryAgain;
+                    }
+
+                    alreadyGuessed.Add(guess);
+                }
+                else
+                {
+                    goto case 0;
+                }
+                break;
+            case 3: //minmax
+                
+                if (activeRow == 0)
+                {
+                    goto case 1;
+                    /*var first = Random.Range(0, 6);
+                    var second = 1;
+                    do
+                    {
+                        second = Random.Range(0, 6);
+                    } while (second == first);
+                    guess = new[] {first, first, second, second};
+                    alreadyGuessed.Add(guess);*/
+                }
+                else if (possibleSols > 2)
+                {
+                    var list = allCombos;
+                    var tried = false;
+                    var rem = new List<int[]>();
+                    foreach (var v in remainingCombos)
+                    {
+                        rem.Add(v);
+                    }
+                    TryInRemaining:
+                    var minRemoved = new int[1296];
+                    for (var i = 0; i < 1296; i++)
+                    {
+                        minRemoved[i] = 0;
+                    }
+                    for (var i = 0; i<list.Count; i++)
+                    {
+                        minRemoved[i] = wouldRemove(list[i]);
+                    }
+                    var maxmin = -1;
+                    foreach (var t in minRemoved)
+                    {
+                        if (t > maxmin)
+                        {
+                            maxmin = t;
+                        }
+                    }
+
+                    var best = minRemoved.Select((s, i) => new { i, s })
+                        .Where(t => t.s == maxmin)
+                        .Select(t => t.i)
+                        .ToList();
+
+                    foreach (var b in best)
+                    {
+                        guess = list[b];
+                        if (comboInList(guess, remainingCombos))
+                        {
+                            break;
+                        }
+                    }
+
+                    if (!comboInList(guess, remainingCombos))
+                    {
+                        foreach (var b in best)
+                        {
+                            guess = list[b];
+                            if (!comboInList(guess, alreadyGuessed))
+                            {
+                                break;
+                            }
+                        }
+                        if (tried)
+                        {
+                            guess = remainingCombos[Random.Range(0, remainingCombos.Count)];
+                        }
+                        else if (comboInList(guess, alreadyGuessed))
+                        {
+                            tried = true;
+                            list = remainingCombos;
+                            goto TryInRemaining;
+                        }
+                        
+                    }
+                    alreadyGuessed.Add(guess);
+                    if (aiAuto) break;
+                    Debug.Log("This guess will remove at least " + maxmin + " possibilities.");
+                }
+                else
+                {
+                    goto case 0;
                 }
                 break;
         }
@@ -285,6 +617,82 @@ public class main : MonoBehaviour
             StartCoroutine(autoCheck(guess));
         }
 
+    }
+
+    int wouldRemove(int[] guess)
+    {
+        var removed = 1500;
+
+        for (var r = 0; r < 4; r++)
+        {
+            for (var w = 0; w + r < 5; w++)
+            {
+                var tempRemoved = 0;
+
+                foreach (var c in remainingCombos)
+                {
+                    var same = 0;
+                    var sim = 0;
+                    var col = new[] { c[0], c[1], c[2], c[3] };
+                    var row = new[] { guess[0], guess[1], guess[2], guess[3] };
+                    for (var i = 0; i < 4; i++)
+                    {
+                        if (col[i] == row[i])
+                        {
+                            same++;
+                            col[i] = -1;
+                            row[i] = -2;
+                        }
+
+                    }
+
+                    var f = new[] { 0, 0, 0, 0, 0, 0 };
+                    var s = new[] { 0, 0, 0, 0, 0, 0 };
+
+                    foreach (var v in row)
+                    {
+                        if (v != -2)
+                        {
+                            f[v]++;
+                        }
+                    }
+                    foreach (var v in col)
+                    {
+                        if (v != -1)
+                        {
+                            s[v]++;
+                        }
+                    }
+
+                    for (var i = 0; i < 6; i++)
+                    {
+                        if (f[i] != 0 && s[i] != 0)
+                        {
+                            if (s[i] <= f[i])
+                            {
+                                sim += s[i];
+                            }
+                            else
+                            {
+                                sim += f[i];
+                            }
+                        }
+                    }
+
+                    if (sim != w || same != r)
+                    {
+                        tempRemoved++;
+                    }
+                }
+
+                if (tempRemoved < removed)
+                {
+                    removed = tempRemoved;
+                }
+            }
+        }
+
+        return removed;
     }
 
     IEnumerator autoCheck(int[] guess)
@@ -494,7 +902,7 @@ public class main : MonoBehaviour
         sd /= (count - 1);
         sd = Math.Sqrt(sd);
         renderAutoStats();
-
+        alreadyGuessed.Clear();
         reds = new int[10];
         whites = new int[10];
         tests = new int[4];
