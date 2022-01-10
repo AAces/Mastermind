@@ -12,16 +12,16 @@ public class main : MonoBehaviour
 {
 
     private int activeRow, possibleSols, removed, index = -1, aiMode, count;
-    private bool pressing, percents, ai, aiAuto, STOP;
+    private bool pressing, percents, ai, aiAuto, STOP, aiMaster, solutionVisible, canSetSolution;
 
-    private List<int[]> remainingCombos, allCombos;
+    private List<int[]> remainingCombos, allCombos, alreadyGuessed;
     private List<int[]>[] removedCombos;
 
-    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText, aiAutoText, speed;
+    public Text correctText, closeText, remainingText, removedText, posText, imposText, percentText, reasonText, testText, aiModeText, aiAutoText, speed, aiMasterText;
     public Text[] statTexts, labels, textToHideDuringAuto, autoInfoText;
 
-    public Button submit, reset, prev, rand, next, quit, clear, test, flip, testClear, aiButton, aiAutoButton, stopAuto;
-    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons, aiModeButtons, speedButtons;
+    public Button submit, reset, prev, rand, next, quit, clear, test, flip, testClear, aiButton, aiAutoButton, stopAuto, randomSolutionButton, toggleSolutionVisible, setSolutionButton, turnOnAIMaster;
+    public Button[] row1, row2, row3, row4, row5, row6, row7, row8, row9, row10, redButtons, whiteButtons, testButtons, aiModeButtons, speedButtons, setSolutionButtons;
     private Button[][] pegs;
 
     public SpriteRenderer check, x;
@@ -31,7 +31,7 @@ public class main : MonoBehaviour
     private Color[] colors;
     private Color[] indsColors; 
     private int[,] currentColors;
-    private int[] reds, whites, tests, intsRemoved, aiSolution, howManyRows;
+    private int[] reds, whites, tests, intsRemoved, aiSolution, howManyRows, solution;
 
     private double sd;
 
@@ -50,11 +50,16 @@ public class main : MonoBehaviour
         ai = false;
         aiAuto = false;
         STOP = false;
+        aiMaster = false;
+        solutionVisible = false;
+        canSetSolution = false;
+        solution = new[] {6, 6, 6, 6};
         autoShow();
         aiAutoText.gameObject.SetActive(false);
         aiMode = 0;
         aiButton.gameObject.SetActive(true);
         aiAutoButton.gameObject.SetActive(false);
+        turnOnAIMaster.gameObject.SetActive(true);
         foreach (var b in aiModeButtons)
         {
             b.gameObject.SetActive(false);
@@ -72,6 +77,7 @@ public class main : MonoBehaviour
         imposText.gameObject.SetActive(false);
         reasonText.gameObject.SetActive(false);
         percentText.gameObject.SetActive(false);
+        aiMasterText.gameObject.SetActive(false);
         stopAuto.gameObject.SetActive(false);
         alreadyGuessed = new List<int[]>();
         pegs = new[] { row1, row2, row3, row4, row5, row6, row7, row8, row9, row10 };
@@ -129,6 +135,7 @@ public class main : MonoBehaviour
         ai = true;
         aiButton.gameObject.SetActive(false);
         submit.gameObject.SetActive(false);
+        turnOnAIMaster.gameObject.SetActive(false);
         aiAutoButton.gameObject.SetActive(true);
         alreadyGuessed.Clear();
         foreach (var b in aiModeButtons)
@@ -161,6 +168,7 @@ public class main : MonoBehaviour
             b.gameObject.SetActive(false);
         }
         aiAutoButton.gameObject.SetActive(false);
+        turnOnAIMaster.gameObject.SetActive(false);
         aiMode = m;
         switch (m) //0=random
         {
@@ -195,7 +203,6 @@ public class main : MonoBehaviour
         aiGuess();
     }
 
-    private List<int[]> alreadyGuessed;
     void aiGuess()
     {
         if (activeRow > 8 || STOP || count>99999)
@@ -1079,6 +1086,140 @@ public class main : MonoBehaviour
             speedButtons[i].onClick.RemoveAllListeners();
             speedButtons[i].onClick.AddListener(delegate { setGaptime(m); });
         }
+
+        randomSolutionButton.gameObject.SetActive(false);
+        toggleSolutionVisible.gameObject.SetActive(false);
+        setSolutionButton.gameObject.SetActive(false);
+
+        randomSolutionButton.onClick.RemoveAllListeners();
+        toggleSolutionVisible.onClick.RemoveAllListeners();
+        setSolutionButton.onClick.RemoveAllListeners();
+        turnOnAIMaster.onClick.RemoveAllListeners();
+
+        randomSolutionButton.onClick.AddListener(randomSolutionPress);
+        toggleSolutionVisible.onClick.AddListener(toggleSolutionVisiblePress);
+        setSolutionButton.onClick.AddListener(setSolutionPress);
+        turnOnAIMaster.onClick.AddListener(turnOnAIMasterPress);
+
+        for (var i = 0; i < 4; i++)
+        {
+            var b = i;
+            setSolutionButtons[i].gameObject.SetActive(true);
+            setSolutionButtons[i].GetComponentInParent<Image>().color = Color.white;
+            setSolutionButtons[i].onClick.RemoveAllListeners();
+            setSolutionButtons[i].onClick.AddListener(delegate{solutionSetButtonsPress(b);});
+            setSolutionButtons[i].gameObject.SetActive(false);
+        }
+        foreach (var v in setSolutionButtons)
+        {
+            var c = v.colors;
+            c.normalColor = colors[6];
+            c.highlightedColor = colors[6];
+            c.selectedColor = colors[6];
+            c.pressedColor = colors[6];
+            v.colors = c;
+        }
+    }
+
+    void turnOnAIMasterPress()
+    {
+        aiMaster = true;
+        turnOnAIMaster.gameObject.SetActive(false);
+        aiButton.gameObject.SetActive(false);
+        randomSolutionButton.gameObject.SetActive(true);
+        setSolutionButton.gameObject.SetActive(true);
+        aiMasterText.gameObject.SetActive(true);
+        canSetSolution = true;
+        foreach (var v in setSolutionButtons)
+        {
+            v.gameObject.SetActive(true);
+        }
+    }
+
+    void randomSolutionPress()
+    {
+        randomSolutionButton.gameObject.SetActive(false);
+        setSolutionButton.gameObject.SetActive(false);
+        canSetSolution = false;
+        solutionVisible = true;
+        toggleSolutionVisiblePress();
+        solution = new[] { Random.Range(0,6), Random.Range(0, 6), Random.Range(0, 6), Random.Range(0, 6) };
+        toggleSolutionVisible.gameObject.SetActive(true);
+    }
+
+    void toggleSolutionVisiblePress()
+    {
+        if (solutionVisible)
+        {
+            solutionVisible = false;
+            foreach (var v in setSolutionButtons)
+            {
+                var c = v.colors;
+                c.normalColor = colors[6];
+                c.highlightedColor = colors[6];
+                c.selectedColor = colors[6];
+                c.pressedColor = colors[6];
+                v.colors = c;
+            }
+        }
+        else
+        {
+            solutionVisible = true;
+            for (var i = 0; i < 4; i++)
+            {
+                var c = setSolutionButtons[i].colors;
+                c.normalColor = colors[solution[i]];
+                c.highlightedColor = colors[solution[i]];
+                c.selectedColor = colors[solution[i]];
+                c.pressedColor = colors[solution[i]];
+                setSolutionButtons[i].colors = c;
+            }
+        }
+    }
+
+    void setSolutionPress()
+    {
+        if (!canSetSolution)
+        {
+            return;
+        }
+
+        if (solution.Any(v => v == 6))
+        {
+            return;
+        }
+
+        solutionVisible = true;
+        canSetSolution = false;
+        toggleSolutionVisible.gameObject.SetActive(true);
+        randomSolutionButton.gameObject.SetActive(false);
+        setSolutionButton.gameObject.SetActive(false);
+
+    }
+
+    void solutionSetButtonsPress(int b)
+    {
+        if (!canSetSolution)
+        {
+            return;
+        }
+        var initialColor = solution[b];
+        int nextColor;
+        if (initialColor == 5 || initialColor == 6)
+        {
+            nextColor = 0;
+        }
+        else
+        {
+            nextColor = initialColor + 1;
+        }
+        solution[b] = nextColor;
+        var c = setSolutionButtons[b].colors;
+        c.normalColor = colors[nextColor];
+        c.highlightedColor = colors[nextColor];
+        c.selectedColor = colors[nextColor];
+        c.pressedColor = colors[nextColor];
+        setSolutionButtons[b].colors = c;
     }
 
     void testClearPress()
@@ -1411,8 +1552,107 @@ public class main : MonoBehaviour
 
         sayIfPossible();
 
+        if (aiMaster)
+        {
+            aiMasterCheck();
+            return;
+        }
         startHinting();
 
+    }
+
+    void aiMasterCheck()
+    {
+        var a = activeRow;
+        var s = new[] { solution[0], solution[1], solution[2], solution[3] };
+        var g = new[] { currentColors[a, 0], currentColors[a, 1], currentColors[a, 2], currentColors[a, 3] };
+
+        //REDS
+        var red = 0;
+        for (var i = 0; i < 4; i++)
+        {
+            if (g[i] == s[i])
+            {
+                red++;
+                s[i] = -1;
+                g[i] = -2;
+            }
+        }
+        reds[a] = red;
+        if (red == 4)
+        {
+            for (var i = 0; i < reds[a]; i++)
+            {
+                inds[a][i].color = indsColors[3];
+            }
+            return;
+        }
+        if (reds[a] > 0)
+        {
+            for (var i = 0; i < reds[a]; i++)
+            {
+                inds[a][i].color = indsColors[2];
+            }
+        }
+        //WHITES
+        var white = 0;
+        var gu = new[] { 0, 0, 0, 0, 0, 0 };
+        var so = new[] { 0, 0, 0, 0, 0, 0 };
+
+        foreach (var v in g)
+        {
+            if (v != -2)
+            {
+                gu[v]++;
+            }
+        }
+        foreach (var v in s)
+        {
+            if (v != -1)
+            {
+                so[v]++;
+            }
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            if (gu[i] != 0 && so[i] != 0)
+            {
+                if (so[i] <= gu[i])
+                {
+                    white += so[i];
+                }
+                else
+                {
+                    white += gu[i];
+                }
+            }
+        }
+
+        whites[a] = white;
+        if (whites[a] > 0)
+        {
+            for (var i = reds[a]; i < reds[a] + whites[a]; i++)
+            {
+                inds[a][i].color = indsColors[1];
+            }
+        }
+
+        //UPDATE
+        updatePossibilities();
+        if (a < 9)
+        {
+            activeRow++;
+            renderBox();
+            renderStats();
+        }
+        else
+        {
+            Debug.Log("out of rows");
+            return;
+        }
+
+        pressing = true;
     }
 
     void sayIfPossible()
