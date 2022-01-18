@@ -1123,6 +1123,7 @@ public class main : MonoBehaviour
 
     void turnOnAIMasterPress()
     {
+        init();
         aiMaster = true;
         turnOnAIMaster.gameObject.SetActive(false);
         aiButton.gameObject.SetActive(false);
